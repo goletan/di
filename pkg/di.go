@@ -1,5 +1,5 @@
 // /di/pkg/di.go
-package pkg
+package di
 
 import (
 	"github.com/goletan/di/internal/container"

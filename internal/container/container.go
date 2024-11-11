@@ -1,5 +1,4 @@
 // /di/internal/container/container.go
-
 package container
 
 import (
@@ -8,6 +7,24 @@ import (
 
 	"go.uber.org/zap"
 )
+
+type Lifetime int
+
+const (
+	Singleton Lifetime = iota
+	Transient
+)
+
+func (l Lifetime) String() string {
+	switch l {
+	case Singleton:
+		return "Singleton"
+	case Transient:
+		return "Transient"
+	default:
+		return "Unknown"
+	}
+}
 
 // Container manages the dependencies and lifecycle of services.
 type Container struct {
