@@ -1,10 +1,10 @@
-// /di/di_test.go
+// /di/pkg/di_test.go
 package di_test
 
 import (
 	"testing"
 
-	"github.com/goletan/di"
+	di "github.com/goletan/di/pkg"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 )
@@ -12,16 +12,6 @@ import (
 // MockService is a simple mock to register in the DI container.
 type MockService struct {
 	name string
-}
-
-// ServiceA depends on ServiceB
-type ServiceA struct {
-	ServiceB *ServiceB
-}
-
-// ServiceB depends on ServiceA
-type ServiceB struct {
-	ServiceA *ServiceA
 }
 
 func (ms *MockService) Name() string {
@@ -35,8 +25,10 @@ func TestContainerRegistration(t *testing.T) {
 	container := di.NewContainer(logger)
 
 	// Registering a mock service
-	mockService := &MockService{name: "TestService"}
-	container.Register("mockService", mockService)
+	mockService := func() interface{} {
+		return &MockService{name: "TestService"}
+	}
+	container.Register("mockService", mockService, di.Transient)
 
 	// Resolving the registered service
 	resolved, err := container.Resolve("mockService")
@@ -62,38 +54,6 @@ func TestResolveUnregisteredService(t *testing.T) {
 	}
 }
 
-// TestCircularDependency tests manual handling of circular dependencies.
-func TestCircularDependency(t *testing.T) {
-	core, _ := observer.New(zap.InfoLevel)
-	logger := zap.New(core)
-	container := di.NewContainer(logger)
-
-	serviceA := &ServiceA{}
-	serviceB := &ServiceB{}
-
-	// Register both services
-	container.Register("serviceA", serviceA)
-	container.Register("serviceB", serviceB)
-
-	// Trying to resolve circular dependencies manually (since our DI does not handle wiring these)
-	// Normally, DI frameworks that support circular dependencies would handle this.
-	resolvedA, err := container.Resolve("serviceA")
-	if err != nil {
-		t.Fatalf("Failed to resolve ServiceA: %v", err)
-	}
-
-	// Simulate circular assignment
-	resolvedA.(*ServiceA).ServiceB = serviceB
-	serviceB.ServiceA = resolvedA.(*ServiceA)
-
-	if resolvedA.(*ServiceA).ServiceB == nil {
-		t.Errorf("Expected ServiceB to be assigned to ServiceA, got nil")
-	}
-	if serviceB.ServiceA == nil {
-		t.Errorf("Expected ServiceA to be assigned to ServiceB, got nil")
-	}
-}
-
 // TestSingletonRegistration tests the registration and resolution of singleton services in the DI container.
 func TestSingletonRegistration(t *testing.T) {
 	core, _ := observer.New(zap.InfoLevel)
@@ -101,9 +61,9 @@ func TestSingletonRegistration(t *testing.T) {
 	container := di.NewContainer(logger)
 
 	// Registering a singleton service
-	container.RegisterSingleton("singletonService", func() interface{} {
+	container.Register("singletonService", func() interface{} {
 		return &MockService{name: "SingletonService"}
-	})
+	}, di.Singleton)
 
 	// Resolving the singleton service multiple times
 	resolved1, err1 := container.Resolve("singletonService")
@@ -128,16 +88,16 @@ func TestTransientRegistration(t *testing.T) {
 	container := di.NewContainer(logger)
 
 	// Registering a transient service
-	container.RegisterTransient("transientService", func() interface{} {
+	container.Register("transientService", func() interface{} {
 		return &MockService{name: "TransientService"}
-	})
+	}, di.Transient)
 
 	// Resolving the transient service multiple times
-	resolved1, err1 := container.ResolveTransient("transientService")
+	resolved1, err1 := container.Resolve("transientService")
 	if err1 != nil {
 		t.Fatalf("Expected transient service to be resolved, got error: %v", err1)
 	}
-	resolved2, err2 := container.ResolveTransient("transientService")
+	resolved2, err2 := container.Resolve("transientService")
 	if err2 != nil {
 		t.Fatalf("Expected transient service to be resolved, got error: %v", err2)
 	}
@@ -157,17 +117,20 @@ func TestLifecycleHooks(t *testing.T) {
 	preInitCalled := false
 	postDestroyCalled := false
 
-	container.RegisterSingleton("hookedService", func() interface{} {
-		return &MockService{name: "HookedService"}
-	})
-
-	container.RegisterPreInit("hookedService", func() {
-		preInitCalled = true
-	})
-
-	container.RegisterPostDestroy("hookedService", func() {
-		postDestroyCalled = true
-	})
+	// Register a service with pre-initialization and post-destroy hooks
+	container.Register(
+		"hookedService",
+		func() interface{} {
+			return &MockService{name: "HookedService"}
+		},
+		di.Singleton,
+		di.WithInitHook(func() {
+			preInitCalled = true
+		}),
+		di.WithDestroyHook(func() {
+			postDestroyCalled = true
+		}),
+	)
 
 	// Resolve the service to trigger pre-initialization
 	_, err := container.Resolve("hookedService")
