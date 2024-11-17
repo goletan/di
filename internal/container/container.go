@@ -2,151 +2,78 @@
 package container
 
 import (
-	"fmt"
+	"errors"
 	"sync"
 
 	"go.uber.org/zap"
 )
 
-type Lifetime int
-
-const (
-	Singleton Lifetime = iota
-	Transient
-)
-
-func (l Lifetime) String() string {
-	switch l {
-	case Singleton:
-		return "Singleton"
-	case Transient:
-		return "Transient"
-	default:
-		return "Unknown"
-	}
-}
-
-// Container manages the dependencies and lifecycle of services.
 type Container struct {
-	services  map[string]serviceDefinition
-	instances map[string]interface{}
-	mu        sync.RWMutex
-	logger    *zap.Logger
+	services map[string]*serviceEntry
+	logger   *zap.Logger
+	mu       sync.RWMutex
 }
 
-type serviceDefinition struct {
+type serviceEntry struct {
 	constructor func() interface{}
-	lifetime    Lifetime
-	initHook    func()
-	destroyHook func()
+	instance    interface{}
+	lifetime    LifetimeType
 }
 
-// NewContainer creates a new DI container.
 func NewContainer(logger *zap.Logger) *Container {
 	return &Container{
-		services:  make(map[string]serviceDefinition),
-		instances: make(map[string]interface{}),
-		logger:    logger,
+		services: make(map[string]*serviceEntry),
+		logger:   logger,
 	}
 }
 
-// Register adds a new service to the DI container with a specified lifetime.
-func (c *Container) Register(name string, constructor func() interface{}, lifetime Lifetime, opts ...ServiceOption) {
+func (c *Container) Register(name string, constructor func() interface{}, lifetime LifetimeType) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	serviceDef := serviceDefinition{
+	c.services[name] = &serviceEntry{
 		constructor: constructor,
 		lifetime:    lifetime,
 	}
-
-	for _, opt := range opts {
-		opt(&serviceDef)
-	}
-
-	c.services[name] = serviceDef
 	c.logger.Info("Service registered", zap.String("service_name", name), zap.String("lifetime", lifetime.String()))
 }
 
-// ServiceOption is a function that configures a service definition.
-type ServiceOption func(*serviceDefinition)
-
-// WithInitHook adds an initialization hook to a service.
-func WithInitHook(hook func()) ServiceOption {
-	return func(s *serviceDefinition) {
-		s.initHook = hook
-	}
-}
-
-// WithDestroyHook adds a destroy hook to a service.
-func WithDestroyHook(hook func()) ServiceOption {
-	return func(s *serviceDefinition) {
-		s.destroyHook = hook
-	}
-}
-
-// Resolve retrieves a service by name from the DI container.
 func (c *Container) Resolve(name string) (interface{}, error) {
 	c.mu.RLock()
-	serviceDef, exists := c.services[name]
+	entry, exists := c.services[name]
 	c.mu.RUnlock()
+
 	if !exists {
-		return nil, fmt.Errorf("service %s not found", name)
+		c.logger.Error("Service not found", zap.String("service_name", name))
+		return nil, errors.New("service not found: " + name)
 	}
 
-	if serviceDef.lifetime == Singleton {
-		c.mu.Lock()
-		defer c.mu.Unlock()
-
-		if instance, found := c.instances[name]; found {
-			return instance, nil
-		}
-
-		if serviceDef.initHook != nil {
-			serviceDef.initHook()
-		}
-		instance := serviceDef.constructor()
-		c.instances[name] = instance
-		c.logger.Info("Singleton service initialized", zap.String("service_name", name))
-		return instance, nil
+	if entry.lifetime == LifetimeSingleton && entry.instance != nil {
+		return entry.instance, nil
 	}
 
-	instance := serviceDef.constructor()
-	if serviceDef.initHook != nil {
-		serviceDef.initHook()
+	instance := entry.constructor()
+	if entry.lifetime == LifetimeSingleton {
+		entry.instance = instance
 	}
-	c.logger.Info("Transient service resolved", zap.String("service_name", name))
+
 	return instance, nil
 }
 
-// MustResolve retrieves a service and panics if not found, useful for essential services.
 func (c *Container) MustResolve(name string) interface{} {
-	service, err := c.Resolve(name)
+	instance, err := c.Resolve(name)
 	if err != nil {
-		panic(fmt.Sprintf("failed to resolve service: %s", err))
+		panic(err)
 	}
-	return service
+	return instance
 }
 
-// Destroy removes a service from the container and calls the destroy hook if available.
 func (c *Container) Destroy(name string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	serviceDef, exists := c.services[name]
-	if !exists {
-		c.logger.Warn("Service not found during destroy", zap.String("service_name", name))
-		return
+	if _, exists := c.services[name]; exists {
+		delete(c.services, name)
+		c.logger.Info("Service destroyed", zap.String("service_name", name))
 	}
-
-	if _, found := c.instances[name]; found {
-		if serviceDef.destroyHook != nil {
-			serviceDef.destroyHook()
-		}
-		delete(c.instances, name)
-		c.logger.Info("Singleton instance destroyed", zap.String("service_name", name))
-	}
-
-	delete(c.services, name)
-	c.logger.Info("Service destroyed", zap.String("service_name", name))
 }
