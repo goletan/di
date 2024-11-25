@@ -5,12 +5,13 @@ import (
 	"errors"
 	"sync"
 
+	"github.com/goletan/observability/shared/logger"
 	"go.uber.org/zap"
 )
 
 type Container struct {
 	services map[string]*serviceEntry
-	logger   *zap.Logger
+	logger   *logger.ZapLogger
 	mu       sync.RWMutex
 }
 
@@ -20,10 +21,10 @@ type serviceEntry struct {
 	lifetime    LifetimeType
 }
 
-func NewContainer(logger *zap.Logger) *Container {
+func NewContainer(log *logger.ZapLogger) *Container {
 	return &Container{
 		services: make(map[string]*serviceEntry),
-		logger:   logger,
+		logger:   log,
 	}
 }
 

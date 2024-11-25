@@ -3,7 +3,7 @@ package di
 
 import (
 	"github.com/goletan/di/internal/container"
-	"go.uber.org/zap"
+	"github.com/goletan/observability/shared/logger"
 )
 
 type Container struct {
@@ -23,7 +23,7 @@ const (
 )
 
 // NewContainer creates a new DI container with the public API.
-func NewContainer(logger *zap.Logger) *Container {
+func NewContainer(log *logger.ZapLogger) *Container {
 	return &Container{
 		internal: container.NewContainer(logger),
 	}
