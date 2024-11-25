@@ -25,7 +25,7 @@ const (
 // NewContainer creates a new DI container with the public API.
 func NewContainer(log *logger.ZapLogger) *Container {
 	return &Container{
-		internal: container.NewContainer(logger),
+		internal: container.NewContainer(log),
 	}
 }
 
