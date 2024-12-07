@@ -1,4 +1,3 @@
-// /di/internal/container/lifetime.go
 package container
 
 type LifetimeType int

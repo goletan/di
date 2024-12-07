@@ -1,4 +1,3 @@
-// /di/pkg/di.go
 package di
 
 import (

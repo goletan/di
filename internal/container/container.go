@@ -1,4 +1,3 @@
-// /di/internal/container/container.go
 package container
 
 import (
