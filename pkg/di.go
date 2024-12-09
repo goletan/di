@@ -14,11 +14,11 @@ type LifetimeType = container.LifetimeType
 
 const (
 	// LifetimeSingleton defines that the service should be a singleton.
-	LifetimeSingleton LifetimeType = container.LifetimeSingleton
+	LifetimeSingleton = container.LifetimeSingleton
 	// LifetimeTransient defines that the service should be created every time it is requested.
-	LifetimeTransient LifetimeType = container.LifetimeTransient
+	LifetimeTransient = container.LifetimeTransient
 	// LifetimeScoped defines that the service should be created once per scope (not yet implemented).
-	LifetimeScoped LifetimeType = container.LifetimeScoped
+	LifetimeScoped = container.LifetimeScoped
 )
 
 // NewContainer creates a new DI container with the public API.
